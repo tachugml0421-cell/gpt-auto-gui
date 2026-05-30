@@ -20,7 +20,7 @@ GPT Auto GUI is a compact Windows desktop tool for polishing and translating cop
 ## Installation
 
 ```powershell
-git clone https://github.com/TachuHub/gpt-auto-gui.git
+git clone https://github.com/tachugml0421-cell/gpt-auto-gui.git
 cd gpt-auto-gui
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
