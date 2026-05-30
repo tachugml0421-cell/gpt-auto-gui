@@ -1,0 +1,27 @@
+# Local secrets
+gpt_config.ini
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Editor and OS files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
