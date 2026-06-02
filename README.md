@@ -52,8 +52,8 @@ Prompt templates should use `{text}` as the placeholder for copied text:
 
 ```ini
 [prompts]
-TRANSLATE_PROMPT = Translate the following text into natural American English:\n{text}
-POLISH_PROMPT = Polish the following text without changing its meaning:\n{text}
+TRANSLATE_PROMPT = Read the text below:\n{text}\n\nPolish it first, then translate it into natural American English. Output only the final translation.
+POLISH_PROMPT = Read the text below:\n{text}\n\nPolish the wording and grammar without changing the meaning. Output only the polished text.
 ```
 
 If `{text}` is omitted, GPT Auto GUI appends the copied text after the prompt for backward compatibility.
