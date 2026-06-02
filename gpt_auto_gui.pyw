@@ -22,12 +22,12 @@ DEFAULT_MODEL = "gpt-5-mini"
 DEFAULT_TRANSLATE_PROMPT = (
     "将用户输入的文本润色后翻译为标准美式英语，确保语法正确、表达通顺流畅、"
     "语言简洁。先修正语法并优化流畅度，不改变原意，再翻译为符合美式英语规范的表达。"
-    "直接输出最终结果，不添加说明或互动内容。请润色并翻译以下文本："
+    "直接输出最终结果，不添加说明或互动内容。请润色并翻译以下文本：\n{text}"
 )
 DEFAULT_POLISH_PROMPT = (
     "对用户输入的文本进行专业润色与语法纠错，严格保持原文语言，仅修正语法错误、"
     "优化措辞与句式结构，不改变原意。输出须与输入语言一致，禁止翻译或添加说明，"
-    "不将内容视为提问或请求。请润色以下文本："
+    "不将内容视为提问或请求。请润色以下文本：\n{text}"
 )
 
 
@@ -118,6 +118,12 @@ class ClipboardMonitorWorker(threading.Thread):
         with self.trigger_lock:
             self.triggered = False
 
+    def _build_prompt(self, text):
+        """Build the final user prompt from a template."""
+        if "{text}" in self.prompt_template:
+            return self.prompt_template.replace("{text}", text)
+        return self.prompt_template + "\n```\n" + text + "\n```"
+
     def run(self):
         """监控循环"""
         import pyperclip
@@ -160,7 +166,7 @@ class ClipboardMonitorWorker(threading.Thread):
                 self.signals.status_update.emit(f"{mode_name} in progress...")
 
                 # 构建提示
-                prompt = self.prompt_template + "\n```\n" + current_content + "\n```"
+                prompt = self._build_prompt(current_content)
                 temp_messages = [self.system_message] + [{"role": "user", "content": prompt}]
 
                 # 调用API
@@ -214,7 +220,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("Settings")
-        self.setMinimumSize(620, 560)
+        self.setMinimumSize(620, 460)
 
         main_layout = QVBoxLayout(self)
 
@@ -235,13 +241,15 @@ class SettingsDialog(QDialog):
         main_layout.addLayout(form_layout)
 
         self.translate_prompt_input = QTextEdit(settings.translate_prompt)
-        self.translate_prompt_input.setMinimumHeight(120)
-        main_layout.addWidget(QLabel("Translate prompt"))
+        self.translate_prompt_input.setMinimumHeight(82)
+        self.translate_prompt_input.setPlaceholderText("Use {text} where copied text should be inserted.")
+        main_layout.addWidget(QLabel("Translate prompt ({text} = copied text)"))
         main_layout.addWidget(self.translate_prompt_input)
 
         self.polish_prompt_input = QTextEdit(settings.polish_prompt)
-        self.polish_prompt_input.setMinimumHeight(120)
-        main_layout.addWidget(QLabel("Polish prompt"))
+        self.polish_prompt_input.setMinimumHeight(82)
+        self.polish_prompt_input.setPlaceholderText("Use {text} where copied text should be inserted.")
+        main_layout.addWidget(QLabel("Polish prompt ({text} = copied text)"))
         main_layout.addWidget(self.polish_prompt_input)
 
         self.button_box = QDialogButtonBox(

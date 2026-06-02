@@ -48,13 +48,15 @@ Then edit `gpt_config.ini` and fill in your own API key. Do not commit `gpt_conf
 
 You can also click `Settings` in the app to update the API key, base URL, model, translation prompt, and polishing prompt. Saved changes are written to `gpt_config.ini`.
 
-Prompt templates can be edited in the `[prompts]` section:
+Prompt templates should use `{text}` as the placeholder for copied text:
 
 ```ini
 [prompts]
-TRANSLATE_PROMPT = Your translation prompt here
-POLISH_PROMPT = Your polishing prompt here
+TRANSLATE_PROMPT = Translate the following text into natural American English:\n{text}
+POLISH_PROMPT = Polish the following text without changing its meaning:\n{text}
 ```
+
+If `{text}` is omitted, GPT Auto GUI appends the copied text after the prompt for backward compatibility.
 
 ## Usage
 
