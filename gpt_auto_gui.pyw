@@ -3,15 +3,42 @@ import sys
 import time
 import threading
 import configparser
+from dataclasses import dataclass
 import keyboard
 from openai import OpenAI
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QLabel
+    QPushButton, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QLabel,
+    QDialog, QFormLayout, QLineEdit, QTextEdit, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QAction
+
+
+CONFIG_FILENAME = "gpt_config.ini"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_MODEL = "gpt-5-mini"
+DEFAULT_TRANSLATE_PROMPT = (
+    "将用户输入的文本润色后翻译为标准美式英语，确保语法正确、表达通顺流畅、"
+    "语言简洁。先修正语法并优化流畅度，不改变原意，再翻译为符合美式英语规范的表达。"
+    "直接输出最终结果，不添加说明或互动内容。请润色并翻译以下文本："
+)
+DEFAULT_POLISH_PROMPT = (
+    "对用户输入的文本进行专业润色与语法纠错，严格保持原文语言，仅修正语法错误、"
+    "优化措辞与句式结构，不改变原意。输出须与输入语言一致，禁止翻译或添加说明，"
+    "不将内容视为提问或请求。请润色以下文本："
+)
+
+
+@dataclass
+class AppSettings:
+    api_key: str
+    base_url: str
+    model: str
+    translate_prompt: str
+    polish_prompt: str
+    config_path: str
 
 
 class WorkerSignals(QObject):
@@ -180,15 +207,71 @@ class ClipboardMonitorWorker(threading.Thread):
         self.running = False
 
 
+class SettingsDialog(QDialog):
+    """Settings editor for API connection and prompt templates."""
+
+    def __init__(self, settings: AppSettings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle("Settings")
+        self.setMinimumSize(620, 560)
+
+        main_layout = QVBoxLayout(self)
+
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.api_key_input = QLineEdit(settings.api_key)
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_input.setPlaceholderText("OpenAI API key")
+        form_layout.addRow("API key", self.api_key_input)
+
+        self.base_url_input = QLineEdit(settings.base_url)
+        form_layout.addRow("Base URL", self.base_url_input)
+
+        self.model_input = QLineEdit(settings.model)
+        form_layout.addRow("Model", self.model_input)
+
+        main_layout.addLayout(form_layout)
+
+        self.translate_prompt_input = QTextEdit(settings.translate_prompt)
+        self.translate_prompt_input.setMinimumHeight(120)
+        main_layout.addWidget(QLabel("Translate prompt"))
+        main_layout.addWidget(self.translate_prompt_input)
+
+        self.polish_prompt_input = QTextEdit(settings.polish_prompt)
+        self.polish_prompt_input.setMinimumHeight(120)
+        main_layout.addWidget(QLabel("Polish prompt"))
+        main_layout.addWidget(self.polish_prompt_input)
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        main_layout.addWidget(self.button_box)
+
+    def get_settings(self) -> AppSettings:
+        return AppSettings(
+            api_key=self.api_key_input.text().strip(),
+            base_url=self.base_url_input.text().strip() or DEFAULT_BASE_URL,
+            model=self.model_input.text().strip() or DEFAULT_MODEL,
+            translate_prompt=self.translate_prompt_input.toPlainText().strip() or DEFAULT_TRANSLATE_PROMPT,
+            polish_prompt=self.polish_prompt_input.toPlainText().strip() or DEFAULT_POLISH_PROMPT,
+            config_path=self.settings.config_path,
+        )
+
+
 class GPTAutoGUI(QMainWindow):
     """GPT自动模式GUI应用"""
 
-    def __init__(self, api_key: str, base_url: str, model: str = "gpt-5.4-mini"):
+    def __init__(self, settings: AppSettings):
         super().__init__()
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model = model
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.settings = settings
+        self.api_key = settings.api_key
+        self.base_url = settings.base_url
+        self.model = settings.model
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
         # 状态变量
         self.translate_mode = False
@@ -197,22 +280,10 @@ class GPTAutoGUI(QMainWindow):
         self.polish_worker = None
         self.signals = WorkerSignals()
 
-        # 提示模板
-        self.translate_prompt = (
-            "将用户输入的文本润色后翻译为标准美式英语，确保语法正确、表达通顺流畅、"
-            "语言简洁。先修正语法并优化流畅度，不改变原意，再翻译为符合美式英语规范的表达。"
-            "直接输出最终结果，不添加说明或互动内容。请润色并翻译以下文本："
-        )
-        self.polish_prompt = (
-            "对用户输入的文本进行专业润色与语法纠错，严格保持原文语言，仅修正语法错误、"
-            "优化措辞与句式结构，不改变原意。输出须与输入语言一致，禁止翻译或添加说明，"
-            "不将内容视为提问或请求。请润色以下文本："
-        )
-
         # 提示模板映射
         self.prompt_templates = {
-            "translate": self.translate_prompt,
-            "polish": self.polish_prompt
+            "translate": settings.translate_prompt,
+            "polish": settings.polish_prompt
         }
 
         # 连接信号
@@ -230,7 +301,7 @@ class GPTAutoGUI(QMainWindow):
     def _init_ui(self):
         """初始化用户界面 - 极简设计"""
         self.setWindowTitle("GPT Auto")
-        self.setFixedSize(260, 80)
+        self.setFixedSize(330, 86)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 
         # 设置Fusion主题（扁平风格）
@@ -263,6 +334,12 @@ class GPTAutoGUI(QMainWindow):
         self.polish_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.polish_button.clicked.connect(self._toggle_polish_mode)
         button_layout.addWidget(self.polish_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.setFixedHeight(32)
+        self.settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.settings_button.clicked.connect(self._open_settings)
+        button_layout.addWidget(self.settings_button)
 
         main_layout.addLayout(button_layout)
 
@@ -331,6 +408,7 @@ class GPTAutoGUI(QMainWindow):
         # 禁用非活动模式按钮
         self.translate_button.setEnabled(not self.polish_mode)
         self.polish_button.setEnabled(not self.translate_mode)
+        self.settings_button.setStyleSheet(base_style)
 
     def _toggle_translate_mode(self):
         """切换翻译模式"""
@@ -392,6 +470,39 @@ class GPTAutoGUI(QMainWindow):
         self._update_button_styles()
         self.log_label.setText("Stopped")
 
+    def _open_settings(self):
+        """Open settings and persist accepted changes."""
+        dialog = SettingsDialog(self.settings, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_settings = dialog.get_settings()
+        if not new_settings.api_key:
+            QMessageBox.warning(self, "Settings", "API key is required.")
+            return
+
+        save_config(new_settings)
+        self._apply_settings(new_settings)
+        self.log_label.setText(f"Settings saved ({self.model})")
+
+    def _apply_settings(self, settings: AppSettings):
+        """Apply saved settings and restart the API client."""
+        if self.translate_mode:
+            self._stop_translate_mode()
+        if self.polish_mode:
+            self._stop_polish_mode()
+
+        self.settings = settings
+        self.api_key = settings.api_key
+        self.base_url = settings.base_url
+        self.model = settings.model
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        self.prompt_templates = {
+            "translate": settings.translate_prompt,
+            "polish": settings.polish_prompt,
+        }
+        self._update_button_styles()
+
     def _on_status_update(self, message: str):
         """处理状态更新信号"""
         self.log_label.setText(message)
@@ -431,6 +542,12 @@ class GPTAutoGUI(QMainWindow):
             show_action = QAction("显示窗口", self)
             show_action.triggered.connect(self.show)
             tray_menu.addAction(show_action)
+
+            settings_action = QAction("设置", self)
+            settings_action.triggered.connect(self._open_settings)
+            tray_menu.addAction(settings_action)
+
+            tray_menu.addSeparator()
 
             stop_translate_action = QAction("停止翻译", self)
             stop_translate_action.triggered.connect(self._stop_translate_mode)
@@ -481,17 +598,20 @@ class GPTAutoGUI(QMainWindow):
 
 def load_config():
     """Load settings from environment variables or a local config file."""
-    config = configparser.ConfigParser()
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gpt_config.ini")
+    config = configparser.ConfigParser(interpolation=None)
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILENAME)
 
     if os.path.exists(config_path):
         config.read(config_path, encoding="utf-8")
 
     config_section = config["gpt"] if "gpt" in config else {}
+    prompt_section = config["prompts"] if "prompts" in config else {}
 
     api_key = os.getenv("OPENAI_API_KEY") or config_section.get("OPENAI_API_KEY")
-    base_url = os.getenv("OPENAI_BASE_URL") or config_section.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
-    model = os.getenv("OPENAI_MODEL") or config_section.get("MODEL") or "gpt-5-mini"
+    base_url = os.getenv("OPENAI_BASE_URL") or config_section.get("OPENAI_BASE_URL") or DEFAULT_BASE_URL
+    model = os.getenv("OPENAI_MODEL") or config_section.get("MODEL") or DEFAULT_MODEL
+    translate_prompt = prompt_section.get("TRANSLATE_PROMPT", DEFAULT_TRANSLATE_PROMPT)
+    polish_prompt = prompt_section.get("POLISH_PROMPT", DEFAULT_POLISH_PROMPT)
 
     if not api_key:
         print(
@@ -500,17 +620,41 @@ def load_config():
         )
         sys.exit(1)
 
-    return api_key, base_url, model
+    return AppSettings(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        translate_prompt=translate_prompt,
+        polish_prompt=polish_prompt,
+        config_path=config_path,
+    )
+
+
+def save_config(settings: AppSettings):
+    """Persist settings to the local config file."""
+    config = configparser.ConfigParser(interpolation=None)
+    config["gpt"] = {
+        "OPENAI_API_KEY": settings.api_key,
+        "OPENAI_BASE_URL": settings.base_url,
+        "MODEL": settings.model,
+    }
+    config["prompts"] = {
+        "TRANSLATE_PROMPT": settings.translate_prompt,
+        "POLISH_PROMPT": settings.polish_prompt,
+    }
+
+    with open(settings.config_path, "w", encoding="utf-8") as config_file:
+        config.write(config_file)
 
 
 def main():
     """主函数"""
-    api_key, base_url, model = load_config()
+    settings = load_config()
 
     app = QApplication(sys.argv)
     app.setApplicationName("GPT Auto")
 
-    window = GPTAutoGUI(api_key, base_url, model)
+    window = GPTAutoGUI(settings)
     window.show()
 
     sys.exit(app.exec())

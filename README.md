@@ -10,6 +10,7 @@ GPT Auto GUI is a compact Windows desktop tool for polishing and translating cop
 - Toggle modes globally with `Alt+Z` for Translate and `Alt+X` for Polish.
 - Run from a tiny always-on-top PyQt6 window or the Windows system tray.
 - Configure the API key, base URL, and model through environment variables or `gpt_config.ini`.
+- Edit model settings and prompt templates from the in-app `Settings` dialog.
 
 ## Requirements
 
@@ -45,6 +46,16 @@ Copy-Item gpt_config.example.ini gpt_config.ini
 
 Then edit `gpt_config.ini` and fill in your own API key. Do not commit `gpt_config.ini`; it is ignored by Git because it contains secrets.
 
+You can also click `Settings` in the app to update the API key, base URL, model, translation prompt, and polishing prompt. Saved changes are written to `gpt_config.ini`.
+
+Prompt templates can be edited in the `[prompts]` section:
+
+```ini
+[prompts]
+TRANSLATE_PROMPT = Your translation prompt here
+POLISH_PROMPT = Your polishing prompt here
+```
+
 ## Usage
 
 ```powershell
@@ -53,9 +64,10 @@ python .\gpt_auto_gui.pyw
 
 1. Click `Translate` or press `Alt+Z` to enable translation mode.
 2. Click `Polish` or press `Alt+X` to enable polishing mode.
-3. Copy text in any application.
-4. Press `Ctrl` twice quickly.
-5. The processed result is copied to the clipboard and pasted automatically.
+3. Click `Settings` if you want to adjust API settings or prompt templates.
+4. Copy text in any application.
+5. Press `Ctrl` twice quickly.
+6. The processed result is copied to the clipboard and pasted automatically.
 
 ## Packaging A Windows Executable
 
