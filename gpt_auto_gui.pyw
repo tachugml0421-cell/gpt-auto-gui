@@ -260,6 +260,7 @@ class SettingsDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         main_layout.addWidget(self.button_box)
+        self.resize(self.minimumWidth(), self.minimumHeight())
 
     def get_settings(self) -> AppSettings:
         return AppSettings(
